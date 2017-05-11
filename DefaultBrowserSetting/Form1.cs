@@ -40,15 +40,20 @@ namespace DefaultBrowserSetting
                 this.ShowInTaskbar = false;
             }
 
-            ShowDefaultAppsUI();
-            Process p = PopBrowserList(1500);
+            bool success = SetBrowser();
 
-            SetDefaultBrowser(p);
-
-            if (CloseWindowsAutomatically())
+            if (success)
             {
-                Close();
+                if (CloseWindowsAutomatically())
+                {
+                    Close();
+                }
             }
+            else
+            {
+                SetForegroundWindow(this.Handle.ToInt32());
+            }
+
         }
         private bool IsWindows10()
         {
@@ -60,7 +65,12 @@ namespace DefaultBrowserSetting
         }
         private int GetBrowerIndex()
         {
-            return int.Parse(ConfigurationManager.AppSettings["desiredBrowerIndex"]);
+            return int.Parse(ConfigurationManager.AppSettings["desiredBrowerIndex"].Split(',')[0]);
+        }
+
+        private String GetDesiredBrower()
+        {
+            return ConfigurationManager.AppSettings["desiredBrowerIndex"].Split(',')[1];
         }
 
         private bool CloseWindowsAutomatically()
@@ -70,6 +80,14 @@ namespace DefaultBrowserSetting
         private bool SetDefaultBrowserAtStartup()
         {
             return bool.Parse(ConfigurationManager.AppSettings["setDefaultBrowserAtStartup"]);
+        }
+        private int GetRetryCount()
+        {
+            if (ConfigurationManager.AppSettings.AllKeys.Contains("retryCount"))
+            {
+                return int.Parse(ConfigurationManager.AppSettings["retryCount"]);
+            }
+            return 10;
         }
 
         private void ShowDefaultAppsUI()
@@ -123,11 +141,82 @@ namespace DefaultBrowserSetting
         }
         private void btnDefaultBrowser_Click(object sender, EventArgs e)
         {
-            ShowDefaultAppsUI();
-            Process p = PopBrowserList(500);
-            SetDefaultBrowser(p);
+            SetBrowser();
         }
 
+        private bool IsSetSuccessful()
+        {
+            return GetDesiredBrower().Trim().ToLower() == GetSystemDefaultBrowser().Trim().ToLower();
+        }
+
+        private bool SetBrowser()
+        {
+            int maxRetry = GetRetryCount();
+
+            while (!IsSetSuccessful() && maxRetry > 0)
+            {
+                ShowDefaultAppsUI();
+                Process p = PopBrowserList(500);
+                SetDefaultBrowser(p);
+                maxRetry--;
+                System.Threading.Thread.Sleep(1000);
+            }
+
+            bool success = IsSetSuccessful();
+            this.lbMessage.Visible = !success;
+
+            if (!success)
+            {
+                MessageBox.Show(String.Format("Failed to set default browser to {0}", GetDesiredBrower()));
+            }
+
+            return success;
+        }
+
+        private string GetSystemDefaultBrowser()
+        {
+            const string userChoice = @"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice";
+            string progId;
+            String browser = "Unknown";
+            using (RegistryKey userChoiceKey = Registry.CurrentUser.OpenSubKey(userChoice))
+            {
+                if (userChoiceKey == null)
+                {
+                    return "Unknown";
+                }
+                object progIdValue = userChoiceKey.GetValue("Progid");
+                if (progIdValue == null)
+                {
+                    browser = "Unknown";
+                }
+                progId = progIdValue.ToString();
+                switch (progId)
+                {
+                    case "IE.HTTP":
+                        browser = "InternetExplorer";
+                        break;
+                    case "FirefoxURL":
+                        browser = "Firefox";
+                        break;
+                    case "ChromeHTML":
+                        browser = "Chrome";
+                        break;
+                    case "OperaStable":
+                        browser = "Opera";
+                        break;
+                    case "SafariHTML":
+                        browser = "Safari";
+                        break;
+                    case "AppXq0fevzme2pys62n3e0fbqa7peapykr8v":
+                        browser = "Edge";
+                        break;
+                    default:
+                        browser = "Unknown";
+                        break;
+                }
+            }
+            return browser;
+        }
         public enum ActivateOptions
         {
             None = 0x00000000,  // No flags set
@@ -162,6 +251,6 @@ namespace DefaultBrowserSetting
             public extern IntPtr ActivateForProtocol([In] String appUserModelId, [In] IntPtr /* IShellItemArray* */itemArray, [Out] out UInt32 processId);
         }
 
-        
+
     }
 }
