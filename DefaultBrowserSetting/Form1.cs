@@ -11,6 +11,9 @@ namespace DefaultBrowserSetting
 {
     public partial class Form1 : Form
     {
+        private const string APPLICATIONNAME = "DefaultBrowserSetting";
+        private const string REGISTRYPATH = @"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\";
+
         public Form1()
         {
             InitializeComponent();
@@ -29,6 +32,8 @@ namespace DefaultBrowserSetting
                 return;
             }
 
+            StartUpInRegedit();
+            
             if (!SetDefaultBrowserAtStartup())
             {
                 return;
@@ -41,7 +46,6 @@ namespace DefaultBrowserSetting
             }
 
             bool success = SetBrowser();
-
             if (success)
             {
                 if (CloseWindowsAutomatically())
@@ -51,10 +55,20 @@ namespace DefaultBrowserSetting
             }
             else
             {
-                SetForegroundWindow(this.Handle.ToInt32());
+                ShowDefaultAppsUI();
+                PopBrowserList(300);
+                Close();
             }
 
         }
+
+        private void StartUpInRegedit()
+        {
+            string appStartPath = System.IO.Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
+            bool AutoStart = AutoStartAtLoggonWindows();
+            RunWhenStart(AutoStart, APPLICATIONNAME, System.IO.Path.Combine(appStartPath, APPLICATIONNAME + ".exe"));
+        }
+
         private bool IsWindows10()
         {
             var reg = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
@@ -80,6 +94,11 @@ namespace DefaultBrowserSetting
         private bool SetDefaultBrowserAtStartup()
         {
             return bool.Parse(ConfigurationManager.AppSettings["setDefaultBrowserAtStartup"]);
+        }
+
+        private bool AutoStartAtLoggonWindows()
+        {
+            return bool.Parse(ConfigurationManager.AppSettings["runAtWindowsStartup"]);
         }
         private int GetRetryCount()
         {
@@ -216,6 +235,83 @@ namespace DefaultBrowserSetting
                 }
             }
             return browser;
+        }
+
+        private bool RunWhenStart(bool started, string name, string path)
+        {
+            bool success = false;
+
+            RegistryKey HKLM = null;
+            RegistryKey Run = null;
+
+            try
+            {
+                HKLM = Registry.CurrentUser;
+                Run = HKLM.CreateSubKey(REGISTRYPATH);
+
+                if (started)
+                {
+                    Run.SetValue(name, path);
+                }
+                else
+                {
+                    if (IsRegeditExisted(name))
+                    {
+                        Run.DeleteValue(name);
+                    }
+                }
+
+                success = true;
+            }
+            catch (Exception exp)
+            {
+                Console.WriteLine(exp);
+            }
+            finally
+            {
+                if (Run != null)
+                {
+                    Run.Close();
+                }
+
+                if (HKLM != null)
+                {
+                    HKLM.Close();
+                }
+            }
+
+            return success;
+        }
+
+        private bool IsRegeditExisted(string name)
+        {
+            bool existed = false;
+
+            try
+            {
+                string[] subkeyNames = Microsoft.Win32.Registry.CurrentUser
+                            .OpenSubKey("Software")
+                            .OpenSubKey("Microsoft")
+                            .OpenSubKey("Windows")
+                            .OpenSubKey("CurrentVersion")
+                            .OpenSubKey("Run")
+                            .GetValueNames();
+
+                foreach (string keyName in subkeyNames)
+                {
+                    if (keyName == name)
+                    {
+                        existed = true;
+                        break;
+                    }
+                }
+            }
+            catch (Exception exp)
+            {
+                Console.WriteLine(exp);
+            }
+
+            return existed;
         }
         public enum ActivateOptions
         {
