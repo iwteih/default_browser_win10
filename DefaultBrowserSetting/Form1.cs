@@ -183,12 +183,6 @@ namespace DefaultBrowserSetting
 
             bool success = IsSetSuccessful();
             this.lbMessage.Visible = !success;
-
-            if (!success)
-            {
-                MessageBox.Show(String.Format("Failed to set default browser to {0}", GetDesiredBrower()));
-            }
-
             return success;
         }
 
