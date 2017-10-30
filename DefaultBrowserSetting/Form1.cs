@@ -172,6 +172,13 @@ namespace DefaultBrowserSetting
         {
             int maxRetry = GetRetryCount();
 
+            if(maxRetry <= 0)
+            {
+                ShowDefaultAppsUI();
+                PopBrowserList(500);
+                return true;
+            }
+
             while (!IsSetSuccessful() && maxRetry > 0)
             {
                 ShowDefaultAppsUI();
